@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  makkalsevai-db:
+    image: postgis/postgis:16-3.4-alpine
+    container_name: makkalsevai-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: makkalsevai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5433:5432"
+    volumes:
+      - makkalsevai_data:/var/lib/postgresql/data
+      - ./backend/app/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d makkalsevai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  makkalsevai-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: makkalsevai-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgrespassword@makkalsevai-db:5432/makkalsevai
+      SYNC_DATABASE_URL: postgresql://postgres:postgrespassword@makkalsevai-db:5432/makkalsevai
+      PORT: 8001
+      DEBUG: "true"
+      MATCH_WEIGHT_DISTANCE: "0.45"
+      MATCH_WEIGHT_RATING: "0.30"
+      MATCH_WEIGHT_RELIABILITY: "0.15"
+      MATCH_WEIGHT_FAIRNESS: "0.10"
+      RAZORPAY_KEY_ID: "rzp_test_mockkey"
+      RAZORPAY_KEY_SECRET: "rzp_test_mocksecret"
+    depends_on:
+      makkalsevai-db:
+        condition: service_healthy
+
+volumes:
+  makkalsevai_data:
