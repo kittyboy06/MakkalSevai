@@ -5,7 +5,7 @@ import json
 import logging
 
 from app.core.config import settings
-from app.api.v1 import auth, services, orders, workers, ratings, payments
+from app.api.v1 import auth, services, orders, workers, ratings, payments, admin
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("makkalsevai")
@@ -34,6 +34,7 @@ app.include_router(orders.router, prefix=settings.API_V1_PREFIX)
 app.include_router(workers.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ratings.router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments.router, prefix=settings.API_V1_PREFIX)
+app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 
 @app.get("/")
 async def root():
