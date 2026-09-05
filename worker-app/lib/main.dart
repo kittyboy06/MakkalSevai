@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/constants/app_constants.dart';
+import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/worker_login_screen.dart';
 import 'features/home/worker_home_screen.dart';
 
 void main() async {
@@ -33,7 +35,7 @@ class MakkalSevaiWorkerApp extends StatelessWidget {
       title: 'MakkalSevai Worker',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const WorkerHomeScreen(),
+      home: ApiClient.hasActiveSession ? const WorkerHomeScreen() : const WorkerLoginScreen(),
     );
   }
 }

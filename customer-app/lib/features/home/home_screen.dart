@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/constants/app_constants.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/location_service.dart';
 import '../../models/service_models.dart';
+import '../../models/order_models.dart';
 import '../booking/booking_screen.dart';
+import '../booking/booking_tab_screen.dart';
+import '../activity/activity_tab_screen.dart';
+import '../profile/profile_tab_screen.dart';
+import '../tracking/tracking_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,15 +19,25 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ApiClient _api = ApiClient();
+  final LocationService _locationService = LocationService();
+  final TextEditingController _searchController = TextEditingController();
+
   List<ServiceCategory> _categories = [];
   bool _isLoading = true;
   int _currentNavIndex = 0;
-  final TextEditingController _searchController = TextEditingController();
+  OrderModel? _activeOrder;
+  ServiceItem? _selectedServiceForBooking;
 
   @override
   void initState() {
     super.initState();
     _loadCategories();
+    _checkActiveOrder();
+    _initLocation();
+  }
+
+  Future<void> _initLocation() async {
+    await _locationService.acquireLiveLocation();
   }
 
   Future<void> _loadCategories() async {
@@ -31,6 +46,15 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         _categories = cats;
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _checkActiveOrder() async {
+    final active = await _api.getActiveOrderMe();
+    if (mounted && active != null) {
+      setState(() {
+        _activeOrder = active;
       });
     }
   }
@@ -45,11 +69,36 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      body: IndexedStack(
+        index: _currentNavIndex,
+        children: [
+          _buildExploreScreen(),
+          BookingTabScreen(
+            initialSelectedService: _selectedServiceForBooking,
+            onSwitchToActivity: () => setState(() => _currentNavIndex = 2),
+          ),
+          ActivityTabScreen(
+            onGoToBooking: () => setState(() => _currentNavIndex = 1),
+          ),
+          const ProfileTabScreen(),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildExploreScreen() {
+    return Scaffold(
+      backgroundColor: AppColors.background,
       appBar: _buildAppBar(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : RefreshIndicator(
-              onRefresh: _loadCategories,
+              onRefresh: () async {
+                await _loadCategories();
+                await _checkActiveOrder();
+                await _locationService.acquireLiveLocation(forceRefresh: true);
+              },
               color: AppColors.primary,
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
@@ -57,6 +106,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (_activeOrder != null) _buildActiveOrderBanner(_activeOrder!),
                     _buildSearchBar(),
                     const SizedBox(height: 16),
                     _buildCivicTrustBanner(),
@@ -65,7 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       title: 'Core Trades',
                       titleTa: 'முதன்மை தொழில்கள்',
                       actionLabel: 'View ${_categories.isEmpty ? 24 : _categories.fold<int>(0, (sum, c) => sum + c.services.length)} Services',
-                      onAction: () {},
+                      onAction: () => setState(() => _currentNavIndex = 1),
                     ),
                     const SizedBox(height: 12),
                     _buildCoreTradesGrid(),
@@ -73,8 +123,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     _buildSectionHeader(
                       title: 'Cleaning & Upkeep',
                       titleTa: 'தூய்மை & பராமரிப்பு',
-                      actionLabel: 'Explore',
-                      onAction: () {},
+                      actionLabel: 'Explore All',
+                      onAction: () => setState(() => _currentNavIndex = 1),
                     ),
                     const SizedBox(height: 12),
                     _buildCleaningCarousel(),
@@ -85,7 +135,94 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildActiveOrderBanner(OrderModel order) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.25),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.flash_on_rounded, color: Colors.white, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      'ACTIVE BOOKING: ${(order.serviceName ?? "SERVICE").toUpperCase()}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppColors.emerald,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        order.status.replaceAll('_', ' ').toUpperCase(),
+                        style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  order.matchedWorker != null
+                      ? 'Worker: ${order.matchedWorker!.fullName}'
+                      : 'Connecting with nearby verified tradesperson...',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TrackingScreen(
+                    order: order,
+                    serviceName: order.serviceName ?? 'Service',
+                  ),
+                ),
+              ).then((_) => _checkActiveOrder());
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              visualDensity: VisualDensity.compact,
+            ),
+            child: const Text('Track', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -121,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.emeraldContainer,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: AppColors.emerald.withOpacity(0.3)),
+                      border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
                     ),
                     child: const Text(
                       'GOV-BACKED',
@@ -135,19 +272,35 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 2),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 13, color: AppColors.secondary),
-                  const SizedBox(width: 3),
-                  Text(
-                    AppConstants.defaultLocationPill,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
+              ValueListenableBuilder<LocationState?>(
+                valueListenable: _locationService.liveLocation,
+                builder: (context, loc, _) {
+                  return ValueListenableBuilder<bool>(
+                    valueListenable: _locationService.isLocating,
+                    builder: (context, locating, _) {
+                      return InkWell(
+                        onTap: () => _locationService.acquireLiveLocation(forceRefresh: true),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on, size: 13, color: AppColors.secondary),
+                            const SizedBox(width: 3),
+                            Text(
+                              loc != null ? loc.shortAddress : (locating ? 'Acquiring GPS...' : 'Detecting Location...'),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(width: 2),
+                            const Icon(Icons.keyboard_arrow_down, size: 14, color: AppColors.textMuted),
+                          ],
                         ),
-                  ),
-                  const Icon(Icons.keyboard_arrow_down, size: 14, color: AppColors.textMuted),
-                ],
+                      );
+                    },
+                  );
+                },
               ),
             ],
           ),
@@ -155,8 +308,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.notifications_none_rounded, color: AppColors.textPrimary),
-          onPressed: () {},
+          icon: const Icon(Icons.refresh_rounded, color: AppColors.textPrimary),
+          tooltip: 'Refresh Location & Services',
+          onPressed: () {
+            _locationService.acquireLiveLocation(forceRefresh: true);
+            _loadCategories();
+            _checkActiveOrder();
+          },
         ),
         const SizedBox(width: 8),
       ],
@@ -171,7 +329,7 @@ class _HomeScreenState extends State<HomeScreen> {
         border: Border.all(color: AppColors.outline),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.02),
+            color: Colors.black.withValues(alpha: 0.02),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -179,6 +337,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: TextField(
         controller: _searchController,
+        onSubmitted: (query) {
+          if (query.trim().isNotEmpty) {
+            setState(() => _currentNavIndex = 1);
+          }
+        },
         decoration: InputDecoration(
           hintText: 'Search Electrician, Plumber, AC Repair...',
           hintStyle: const TextStyle(fontSize: 14, color: AppColors.textMuted),
@@ -198,7 +361,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
                       content: Text('Listening... "மின்சார பணியாளர் வேண்டும்"'),
-                      backgroundColor: AppColors.primary,
                       duration: Duration(seconds: 2),
                     ),
                   );
@@ -207,8 +369,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
@@ -223,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.12),
+            color: AppColors.primary.withValues(alpha: 0.12),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -234,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.verified_user_rounded, color: AppColors.emerald, size: 24),
@@ -316,113 +476,106 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCoreTradesGrid() {
-    // 6 Core Trades from Section 6
     final coreServices = [
-      {'id': 1, 'name': 'Electrician', 'ta': 'மின்சார பணியாளர்', 'fee': '₹250', 'icon': Icons.bolt_rounded, 'color': const Color(0xFFF59E0B)},
-      {'id': 2, 'name': 'Plumber', 'ta': 'குழாய் பழுது', 'fee': '₹250', 'icon': Icons.water_drop_rounded, 'color': const Color(0xFF3B82F6)},
-      {'id': 3, 'name': 'Carpenter', 'ta': 'தச்சர் வேலை', 'fee': '₹300', 'icon': Icons.construction_rounded, 'color': const Color(0xFFD97706)},
-      {'id': 4, 'name': 'Painter', 'ta': 'ஓவியர்', 'fee': '₹350', 'icon': Icons.format_paint_rounded, 'color': const Color(0xFF8B5CF6)},
-      {'id': 5, 'name': 'Mason', 'ta': 'கொத்தனார்', 'fee': '₹400', 'icon': Icons.domain_rounded, 'color': const Color(0xFF64748B)},
-      {'id': 7, 'name': 'AC Repair', 'ta': 'ஏசி பழுது', 'fee': '₹350', 'icon': Icons.ac_unit_rounded, 'color': const Color(0xFF06B6D4)},
+      {'id': 1, 'name': 'Electrician', 'name_ta': 'மின்சார பணியாளர்', 'fee': 250, 'icon': Icons.bolt_rounded, 'tag': 'Popular'},
+      {'id': 2, 'name': 'Plumber', 'name_ta': 'குழாய் பழுது', 'fee': 250, 'icon': Icons.water_drop_rounded, 'tag': 'Gov Price'},
+      {'id': 3, 'name': 'Carpenter', 'name_ta': 'தச்சர்', 'fee': 300, 'icon': Icons.carpenter_rounded, 'tag': 'Certified'},
+      {'id': 4, 'name': 'Painter', 'name_ta': 'ஓவியர்', 'fee': 350, 'icon': Icons.format_paint_rounded, 'tag': 'Fixed Fee'},
+      {'id': 5, 'name': 'Mason', 'name_ta': 'கொத்தனார்', 'fee': 400, 'icon': Icons.foundation_rounded, 'tag': 'Verified'},
+      {'id': 7, 'name': 'AC Repair', 'name_ta': 'ஏசி பழுது', 'fee': 350, 'icon': Icons.ac_unit_rounded, 'tag': 'Fast ETA'},
     ];
 
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+        crossAxisCount: 3,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        childAspectRatio: 1.28,
+        childAspectRatio: 0.82,
       ),
       itemCount: coreServices.length,
       itemBuilder: (context, index) {
-        final item = coreServices[index];
-        final serviceId = item['id'] as int;
-        final name = item['name'] as String;
-        final nameTa = item['ta'] as String;
-        final fee = item['fee'] as String;
-        final icon = item['icon'] as IconData;
-        final accentColor = item['color'] as Color;
-
+        final svc = coreServices[index];
         return InkWell(
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
                 builder: (context) => BookingScreen(
-                  serviceId: serviceId,
-                  serviceName: name,
-                  serviceNameTa: nameTa,
-                  baseFee: double.tryParse(fee.replaceAll('₹', '')) ?? 250.0,
+                  serviceId: svc['id'] as int,
+                  serviceName: svc['name'] as String,
+                  serviceNameTa: svc['name_ta'] as String,
+                  baseFee: (svc['fee'] as num).toDouble(),
                 ),
               ),
-            );
+            ).then((_) => _checkActiveOrder());
           },
           borderRadius: BorderRadius.circular(16),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: AppColors.outline),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
               ],
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: accentColor.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(icon, color: accentColor, size: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.secondaryContainer,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    svc['tag'] as String,
+                    style: const TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.onSecondaryContainer,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceDim,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        fee,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryContainer.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    svc['icon'] as IconData,
+                    color: AppColors.primary,
+                    size: 24,
+                  ),
                 ),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name,
+                      svc['name'] as String,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                        fontSize: 12,
                         color: AppColors.textPrimary,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      nameTa,
+                      '₹${svc['fee']} standard',
                       style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.emerald,
                       ),
                     ),
                   ],
@@ -436,23 +589,41 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCleaningCarousel() {
-    final cleanings = [
-      {'name': 'House Deep Cleaning', 'ta': 'வீடு முழு தூய்மை', 'fee': 'From ₹500', 'time': '2-3 hrs', 'icon': Icons.cleaning_services_rounded},
-      {'name': 'Pest Control', 'ta': 'பூச்சி கட்டுப்பாடு', 'fee': 'From ₹600', 'time': '1 hr', 'icon': Icons.pest_control_rounded},
-      {'name': 'Water Tank Cleaning', 'ta': 'தண்ணீர் தொட்டி', 'fee': 'From ₹450', 'time': '1.5 hrs', 'icon': Icons.sanitizer_rounded},
+    final cleaningItems = [
+      {
+        'title': 'House / Deep Cleaning',
+        'subtitle': '4-room full sanitize with verified cleaners',
+        'price': '₹500',
+        'icon': Icons.cleaning_services_rounded,
+        'rating': '4.9 ★ (120+)',
+      },
+      {
+        'title': 'Water Tank Cleaning',
+        'subtitle': 'High-pressure mechanized disinfection',
+        'price': '₹450',
+        'icon': Icons.water_rounded,
+        'rating': '4.8 ★ (85+)',
+      },
+      {
+        'title': 'Pest Control',
+        'subtitle': 'Safe odorless herbal treatments',
+        'price': '₹600',
+        'icon': Icons.bug_report_rounded,
+        'rating': '4.9 ★ (95+)',
+      },
     ];
 
     return SizedBox(
-      height: 110,
+      height: 126,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: cleanings.length,
-        separatorBuilder: (context, index) => const SizedBox(width: 12),
+        itemCount: cleaningItems.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 12),
         itemBuilder: (context, index) {
-          final item = cleanings[index];
+          final item = cleaningItems[index];
           return Container(
-            width: 220,
-            padding: const EdgeInsets.all(12),
+            width: 270,
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(16),
@@ -461,41 +632,48 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppColors.emeraldContainer,
+                    color: AppColors.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(item['icon'] as IconData, color: AppColors.emerald, size: 24),
+                  child: Icon(item['icon'] as IconData, color: AppColors.primary, size: 26),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
-                        item['name'] as String,
+                        item['title'] as String,
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        item['ta'] as String,
+                        item['subtitle'] as String,
                         style: const TextStyle(fontSize: 10, color: AppColors.textSecondary),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item['fee'] as String,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.emerald,
-                        ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            item['price'] as String,
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.emerald),
+                          ),
+                          Flexible(
+                            child: Text(
+                              item['rating'] as String,
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.secondary),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -551,18 +729,41 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNav() {
     return BottomNavigationBar(
       currentIndex: _currentNavIndex,
-      onTap: (i) => setState(() => _currentNavIndex = i),
+      onTap: (i) {
+        setState(() => _currentNavIndex = i);
+        if (i == 2) {
+          _checkActiveOrder();
+        }
+      },
       type: BottomNavigationBarType.fixed,
       backgroundColor: AppColors.surface,
       selectedItemColor: AppColors.primary,
       unselectedItemColor: AppColors.textMuted,
       selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
       unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Explore'),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_today_rounded), label: 'Bookings'),
-        BottomNavigationBarItem(icon: Icon(Icons.receipt_long_rounded), label: 'Activity'),
-        BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
+      items: [
+        const BottomNavigationBarItem(icon: Icon(Icons.explore_rounded), label: 'Explore'),
+        const BottomNavigationBarItem(icon: Icon(Icons.calendar_today_rounded), label: 'Bookings'),
+        BottomNavigationBarItem(
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.receipt_long_rounded),
+              if (_activeOrder != null)
+                Positioned(
+                  top: -2,
+                  right: -2,
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(color: AppColors.secondary, shape: BoxShape.circle),
+                  ),
+                ),
+            ],
+          ),
+          label: 'Activity',
+        ),
+        const BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
       ],
     );
   }

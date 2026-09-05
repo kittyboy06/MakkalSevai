@@ -125,3 +125,19 @@ class OrderTracking(Base):
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="CASCADE"))
     # worker_location stored in PostGIS
     recorded_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class WorkerTransaction(Base):
+    __tablename__ = "worker_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    worker_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    type = Column(String(30), nullable=False)  # 'JOB_PAYOUT', 'BANK_TRANSFER', 'WELFARE_CESS', 'REFUND_ADJUSTMENT'
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String(20), default="completed")  # 'completed', 'pending', 'failed'
+    reference = Column(String(100), nullable=True)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    worker = relationship("User", foreign_keys=[worker_id])
+    order = relationship("Order", foreign_keys=[order_id])

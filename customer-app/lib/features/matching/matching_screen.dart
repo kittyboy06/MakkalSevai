@@ -23,24 +23,29 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
   int _currentStage = 0;
   Timer? _stageTimer;
 
-  final List<Map<String, String>> _stages = [
-    {
-      'title': 'Scanning 5km radius in T. Nagar',
-      'detail': 'Found 3 nearby tradespeople within range',
-    },
-    {
-      'title': 'Matching verified skill ontology',
-      'detail': 'Primary Electrician qualification verified',
-    },
-    {
-      'title': 'DigiLocker & e-Shram authentication check',
-      'detail': 'KYC verified with valid government credentials',
-    },
-    {
-      'title': 'Optimizing 4-factor scoring algorithm',
-      'detail': '45% Distance + 30% Rating + 15% Reliability + 10% Fairness',
-    },
-  ];
+  List<Map<String, String>> get _stages {
+    final locationLabel = widget.order.addressText != null && widget.order.addressText!.isNotEmpty
+        ? widget.order.addressText!.split(',').first
+        : 'your area';
+    return [
+      {
+        'title': 'Scanning 5km radius near $locationLabel',
+        'detail': 'Searching active verified tradespeople within range',
+      },
+      {
+        'title': 'Matching verified ${widget.serviceName} qualification',
+        'detail': 'Primary trade skills and certifications verified',
+      },
+      {
+        'title': 'DigiLocker & e-Shram authentication check',
+        'detail': 'KYC verified with valid government credentials',
+      },
+      {
+        'title': 'Optimizing 4-factor scoring algorithm',
+        'detail': '45% Distance + 30% Rating + 15% Reliability + 10% Fairness',
+      },
+    ];
+  }
 
   @override
   void initState() {
@@ -168,7 +173,7 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
                   height: 130 * _pulseController.value,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.secondary.withOpacity(0.2 * (1 - _pulseController.value)),
+                    color: AppColors.secondary.withValues(alpha: 0.2 * (1 - _pulseController.value)),
                   ),
                 ),
                 Container(
@@ -176,7 +181,7 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
                   height: 90 * _pulseController.value,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.primary.withOpacity(0.15 * (1 - _pulseController.value)),
+                    color: AppColors.primary.withValues(alpha: 0.15 * (1 - _pulseController.value)),
                   ),
                 ),
               ],
@@ -188,7 +193,7 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
                   color: isMatched ? AppColors.emerald : AppColors.primary,
                   boxShadow: [
                     BoxShadow(
-                      color: (isMatched ? AppColors.emerald : AppColors.primary).withOpacity(0.3),
+                      color: (isMatched ? AppColors.emerald : AppColors.primary).withValues(alpha: 0.3),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),
@@ -264,7 +269,7 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
                         stage['detail']!,
                         style: TextStyle(
                           fontSize: 11,
-                          color: isCompleted ? AppColors.textSecondary : AppColors.textMuted.withOpacity(0.6),
+                          color: isCompleted ? AppColors.textSecondary : AppColors.textMuted.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -289,10 +294,10 @@ class _MatchingScreenState extends State<MatchingScreen> with SingleTickerProvid
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.emerald.withOpacity(0.4)),
+        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.4)),
         boxShadow: [
           BoxShadow(
-            color: AppColors.emerald.withOpacity(0.08),
+            color: AppColors.emerald.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),

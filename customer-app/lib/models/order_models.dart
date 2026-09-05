@@ -51,6 +51,7 @@ class MatchedWorker {
 class OrderModel {
   final String id;
   final int serviceId;
+  final String? serviceName;
   final String? description;
   final String status;
   final String scheduledType;
@@ -63,10 +64,16 @@ class OrderModel {
   final String paymentStatus;
   final MatchedWorker? matchedWorker;
   final String? razorpayOrderId;
+  final DateTime? createdAt;
+  final DateTime? acceptedAt;
+  final DateTime? completedAt;
+  final int? ratingStars;
+  final String? reviewText;
 
   OrderModel({
     required this.id,
     required this.serviceId,
+    this.serviceName,
     this.description,
     required this.status,
     this.scheduledType = 'immediate',
@@ -79,6 +86,11 @@ class OrderModel {
     this.paymentStatus = 'pending',
     this.matchedWorker,
     this.razorpayOrderId,
+    this.createdAt,
+    this.acceptedAt,
+    this.completedAt,
+    this.ratingStars,
+    this.reviewText,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -87,9 +99,16 @@ class OrderModel {
       worker = MatchedWorker.fromJson(json['matched_worker'] as Map<String, dynamic>);
     }
 
+    DateTime? parseDt(dynamic val) {
+      if (val == null) return null;
+      if (val is String) return DateTime.tryParse(val);
+      return null;
+    }
+
     return OrderModel(
       id: json['id'] as String,
       serviceId: (json['service_id'] as num?)?.toInt() ?? 1,
+      serviceName: json['service_name'] as String?,
       description: json['description'] as String?,
       status: json['status'] as String? ?? 'requested',
       scheduledType: json['scheduled_type'] as String? ?? 'immediate',
@@ -102,6 +121,11 @@ class OrderModel {
       paymentStatus: json['payment_status'] as String? ?? 'pending',
       matchedWorker: worker,
       razorpayOrderId: json['razorpay_order_id'] as String?,
+      createdAt: parseDt(json['created_at']),
+      acceptedAt: parseDt(json['accepted_at']),
+      completedAt: parseDt(json['completed_at']),
+      ratingStars: (json['rating_stars'] as num?)?.toInt() ?? (json['rating']?['stars'] as num?)?.toInt(),
+      reviewText: json['review_text'] as String? ?? json['rating']?['review_text'] as String?,
     );
   }
 }

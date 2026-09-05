@@ -6,6 +6,9 @@ import '../../core/theme/app_theme.dart';
 import '../kyc/verification_screen.dart';
 import '../dispatch/incoming_offer_sheet.dart';
 import '../job/active_job_screen.dart';
+import '../jobs/worker_jobs_tab_screen.dart';
+import '../wallet/worker_wallet_tab_screen.dart';
+import '../profile/worker_profile_tab_screen.dart';
 
 class WorkerHomeScreen extends StatefulWidget {
   const WorkerHomeScreen({super.key});
@@ -20,6 +23,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> with SingleTickerPr
   bool _isLoading = true;
   bool _isOnline = true;
   bool _isOfferSheetOpen = false;
+  int _currentNavIndex = 0;
   late AnimationController _radarController;
 
   @override
@@ -144,6 +148,25 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> with SingleTickerPr
 
     return Scaffold(
       backgroundColor: AppTheme.slateCanvas,
+      body: IndexedStack(
+        index: _currentNavIndex,
+        children: [
+          _buildDashboardScreen(textTheme),
+          WorkerJobsTabScreen(worker: _worker),
+          WorkerWalletTabScreen(worker: _worker),
+          WorkerProfileTabScreen(
+            worker: _worker,
+            onProfileUpdated: _loadProfile,
+          ),
+        ],
+      ),
+      bottomNavigationBar: _buildBottomNav(),
+    );
+  }
+
+  Widget _buildDashboardScreen(TextTheme textTheme) {
+    return Scaffold(
+      backgroundColor: AppTheme.slateCanvas,
       appBar: _buildHeader(textTheme),
       body: RefreshIndicator(
         onRefresh: _loadProfile,
@@ -181,7 +204,6 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> with SingleTickerPr
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -628,7 +650,12 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> with SingleTickerPr
 
   Widget _buildBottomNav() {
     return BottomNavigationBar(
-      currentIndex: 0,
+      currentIndex: _currentNavIndex,
+      onTap: (index) {
+        setState(() {
+          _currentNavIndex = index;
+        });
+      },
       selectedItemColor: AppTheme.slateNavy,
       unselectedItemColor: AppTheme.slateMuted,
       type: BottomNavigationBarType.fixed,

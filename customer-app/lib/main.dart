@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
+import 'core/network/api_client.dart';
+import 'features/auth/login_screen.dart';
 import 'features/home/home_screen.dart';
 
 void main() {
@@ -24,7 +26,7 @@ class MakkalSevaiApp extends StatelessWidget {
       title: AppConstants.appName,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const HomeScreen(),
+      home: ApiClient.hasActiveSession ? const HomeScreen() : const LoginScreen(),
     );
   }
 }

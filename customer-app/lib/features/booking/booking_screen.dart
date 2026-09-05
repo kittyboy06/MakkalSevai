@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/location_service.dart';
 import '../matching/matching_screen.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -24,6 +25,7 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   final ApiClient _api = ApiClient();
+  final LocationService _locationService = LocationService();
   final TextEditingController _descriptionController = TextEditingController(
     text: 'Switchboard sparking in living room',
   );
@@ -40,6 +42,14 @@ class _BookingScreenState extends State<BookingScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    if (_locationService.liveLocation.value == null) {
+      _locationService.acquireLiveLocation();
+    }
+  }
+
+  @override
   void dispose() {
     _descriptionController.dispose();
     super.dispose();
@@ -48,14 +58,21 @@ class _BookingScreenState extends State<BookingScreen> {
   Future<void> _handleBookNow() async {
     setState(() => _isSubmitting = true);
 
+    var loc = _locationService.liveLocation.value;
+    loc ??= await _locationService.acquireLiveLocation(forceRefresh: true);
+
+    final lat = loc?.lat ?? AppConstants.defaultLat;
+    final lng = loc?.lng ?? AppConstants.defaultLng;
+    final addr = loc?.fullAddress ?? AppConstants.defaultAddress;
+
     try {
       final order = await _api.createOrder(
         serviceId: widget.serviceId,
         description: _descriptionController.text.trim(),
         scheduledType: _isImmediate ? 'immediate' : 'scheduled',
-        customerLat: AppConstants.defaultLat,
-        customerLng: AppConstants.defaultLng,
-        addressText: AppConstants.defaultAddress,
+        customerLat: lat,
+        customerLng: lng,
+        addressText: addr,
       );
 
       if (mounted) {
@@ -211,7 +228,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   color: _isImmediate ? AppColors.surface : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: _isImmediate
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))]
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))]
                       : null,
                 ),
                 child: Row(
@@ -241,7 +258,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   color: !_isImmediate ? AppColors.surface : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: !_isImmediate
-                      ? [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))]
+                      ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 4, offset: const Offset(0, 2))]
                       : null,
                 ),
                 child: Row(
@@ -319,47 +336,66 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildAddressCard() {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.outline),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceDim,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.home_rounded, color: AppColors.primary, size: 22),
+    return ValueListenableBuilder<LocationState?>(
+      valueListenable: _locationService.liveLocation,
+      builder: (context, loc, _) {
+        final addressStr = loc != null ? loc.fullAddress : AppConstants.defaultAddress;
+        return Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.outline),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Service Location (Citizen Home)',
-                  style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceDim,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  AppConstants.defaultAddress,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary),
+                child: const Icon(Icons.my_location_rounded, color: AppColors.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'Current Service Location',
+                          style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w600),
+                        ),
+                        if (loc != null) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            loc.accuracyLabel,
+                            style: const TextStyle(fontSize: 10, color: AppColors.emerald, fontWeight: FontWeight.w700),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      addressStr,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textPrimary),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              TextButton(
+                onPressed: () => _locationService.acquireLiveLocation(forceRefresh: true),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: const Text('Refresh', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {},
-            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-            child: const Text('Change', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -433,7 +469,7 @@ class _BookingScreenState extends State<BookingScreen> {
         border: const Border(top: BorderSide(color: AppColors.outline)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),

@@ -5,7 +5,7 @@ import json
 import logging
 
 from app.core.config import settings
-from app.api.v1 import auth, services, orders, workers, ratings, payments, admin
+from app.api.v1 import auth, services, orders, workers, ratings, payments, admin, customers
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("makkalsevai")
@@ -31,6 +31,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(services.router, prefix=settings.API_V1_PREFIX)
 app.include_router(orders.router, prefix=settings.API_V1_PREFIX)
+app.include_router(customers.router, prefix=settings.API_V1_PREFIX)
 app.include_router(workers.router, prefix=settings.API_V1_PREFIX)
 app.include_router(ratings.router, prefix=settings.API_V1_PREFIX)
 app.include_router(payments.router, prefix=settings.API_V1_PREFIX)

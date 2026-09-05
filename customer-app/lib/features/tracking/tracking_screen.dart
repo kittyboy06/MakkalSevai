@@ -134,7 +134,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         border: Border.all(color: Colors.white, width: 2.5),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 6,
                             offset: const Offset(0, 3),
                           ),
@@ -155,7 +155,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                         border: Border.all(color: Colors.white, width: 2.5),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.25),
+                            color: Colors.black.withValues(alpha: 0.25),
                             blurRadius: 8,
                             offset: const Offset(0, 3),
                           ),
@@ -181,7 +181,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
                   border: Border.all(color: AppColors.outline),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -264,7 +264,7 @@ class _TrackingScreenState extends State<TrackingScreen> {
         border: Border.all(color: AppColors.outline),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.12),
+            color: Colors.black.withValues(alpha: 0.12),
             blurRadius: 16,
             offset: const Offset(0, -4),
           ),

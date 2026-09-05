@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import uuid
+import jwt
 from datetime import datetime, timezone
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.entities import Order, Service, User, WorkerProfile, OrderTracking
 from app.models.schemas import OrderCreateRequest, OrderResponse, SkillPassportResponse
 from app.services.matching_engine import MatchingEngine
+from app.api.v1.auth import get_current_customer
 
 router = APIRouter(prefix="/orders", tags=["Orders & State Machine"])
 
@@ -17,6 +20,7 @@ router = APIRouter(prefix="/orders", tags=["Orders & State Machine"])
 async def create_order(
     payload: OrderCreateRequest,
     customer_id: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -29,13 +33,25 @@ async def create_order(
     if not svc:
         raise HTTPException(status_code=404, detail="Service not found")
 
-    # 2. Get customer user id (fallback to demo customer if unauthenticated)
-    if not customer_id:
-        cust_res = await db.execute(select(User).where(User.role == "customer").limit(1))
-        demo_cust = cust_res.scalar_one_or_none()
-        cust_uid = demo_cust.id if demo_cust else uuid.uuid4()
-    else:
-        cust_uid = uuid.UUID(customer_id)
+    # 2. Get customer user id (from JWT auth, explicit param, or fallback to demo customer)
+    cust_uid = None
+    if authorization and authorization.startswith("Bearer "):
+        try:
+            token = authorization.replace("Bearer ", "").strip()
+            decoded = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+            sub_id = decoded.get("sub")
+            if sub_id:
+                cust_uid = uuid.UUID(sub_id)
+        except Exception:
+            pass
+
+    if not cust_uid:
+        if customer_id:
+            cust_uid = uuid.UUID(customer_id)
+        else:
+            cust_res = await db.execute(select(User).where(User.role == "customer").limit(1))
+            demo_cust = cust_res.scalar_one_or_none()
+            cust_uid = demo_cust.id if demo_cust else uuid.uuid4()
 
     # 3. Create initial order in 'matching' status
     order_id = uuid.uuid4()
@@ -99,6 +115,48 @@ async def create_order(
 
     # 5. Return order response
     return await get_order(str(order_id), db)
+
+@router.get("/me", response_model=List[OrderResponse])
+async def get_my_orders(
+    current_customer: User = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch all service orders placed by the currently authenticated customer, ordered by newest first.
+    """
+    res = await db.execute(
+        select(Order.id)
+        .where(Order.customer_id == current_customer.id)
+        .order_by(Order.created_at.desc())
+    )
+    order_ids = res.scalars().all()
+
+    orders = []
+    for o_id in order_ids:
+        order_resp = await get_order(str(o_id), db)
+        orders.append(order_resp)
+    return orders
+
+@router.get("/me/active", response_model=Optional[OrderResponse])
+async def get_my_active_order(
+    current_customer: User = Depends(get_current_customer),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Fetch the latest active or in-progress order for the authenticated customer.
+    Restores active-order state on app launch.
+    """
+    res = await db.execute(
+        select(Order.id)
+        .where(Order.customer_id == current_customer.id)
+        .where(Order.status.in_(["matching", "offered", "accepted", "worker_enroute", "in_progress"]))
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    active_id = res.scalar_one_or_none()
+    if not active_id:
+        return None
+    return await get_order(str(active_id), db)
 
 @router.get("/{id}", response_model=OrderResponse)
 async def get_order(id: str, db: AsyncSession = Depends(get_db)):

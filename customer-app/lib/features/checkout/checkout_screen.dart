@@ -190,7 +190,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.emerald.withOpacity(0.3)),
+        border: Border.all(color: AppColors.emerald.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -284,7 +284,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _isPaid ? AppColors.emeraldContainer.withOpacity(0.3) : AppColors.surface,
+        color: _isPaid ? AppColors.emeraldContainer.withValues(alpha: 0.3) : AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: _isPaid ? AppColors.emerald : AppColors.outline),
       ),

@@ -19,6 +19,22 @@ class TokenResponse(BaseModel):
     phone: str
     role: str
     full_name: Optional[str] = None
+    email: Optional[str] = None
+
+class EmailLoginRequest(BaseModel):
+    email: str
+    password: Optional[str] = None
+    otp: Optional[str] = "123456"
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+
+class EmailSignupRequest(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    phone: Optional[str] = None
+    role: Optional[str] = "customer"
+    trade_name: Optional[str] = None
 
 # Services & Ontology Schemas
 class ServiceItem(BaseModel):
@@ -101,3 +117,59 @@ class RatingResponse(BaseModel):
     stars: int
     review_text: Optional[str] = None
     created_at: datetime
+
+# Worker Schemas
+class WorkerJobResponse(BaseModel):
+    id: str
+    service_id: Optional[int] = None
+    service_name: str
+    service_name_ta: Optional[str] = None
+    customer_name: str
+    customer_phone: str
+    address_text: Optional[str] = None
+    customer_lat: Optional[float] = None
+    customer_lng: Optional[float] = None
+    description: Optional[str] = None
+    status: str
+    scheduled_type: str = "immediate"
+    final_amount: float
+    worker_payout: float
+    payment_status: str
+    rating: Optional[int] = None
+    review_text: Optional[str] = None
+    created_at: datetime
+    accepted_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+
+class WorkerTransactionItem(BaseModel):
+    id: str
+    type: str  # 'JOB_PAYOUT', 'BANK_TRANSFER', 'WELFARE_CESS', 'REFUND_ADJUSTMENT'
+    amount: float
+    status: str
+    reference: Optional[str] = None
+    description: Optional[str] = None
+    created_at: datetime
+
+class WorkerBankAccount(BaseModel):
+    bank_name: str
+    account_number_masked: str
+    ifsc: str
+    account_holder: str
+    status_label: str = "Demo Linked Account"
+
+class WorkerWalletResponse(BaseModel):
+    worker_id: str
+    available_balance: float
+    today_earnings: float
+    this_week_earnings: float
+    total_life_earnings: float
+    welfare_cess_total: float
+    payout_bank: WorkerBankAccount
+    transactions: List[WorkerTransactionItem] = []
+
+class WorkerPayoutRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+
+class WorkerLocationUpdate(BaseModel):
+    lat: float
+    lng: float
