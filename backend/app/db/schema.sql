@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS order_tracking (
 -- Ratings & Citizen Reviews
 CREATE TABLE IF NOT EXISTS ratings (
   id SERIAL PRIMARY KEY,
-  order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+  order_id UUID UNIQUE REFERENCES orders(id) ON DELETE CASCADE,
   customer_id UUID REFERENCES users(id) ON DELETE SET NULL,
   worker_id UUID REFERENCES users(id) ON DELETE SET NULL,
   stars INT CHECK (stars BETWEEN 1 AND 5),
@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS disputes (
 CREATE TABLE IF NOT EXISTS matching_config (
   id SERIAL PRIMARY KEY,
   param_key VARCHAR(50) UNIQUE NOT NULL,
-  param_value NUMERIC(4, 3) NOT NULL,
+  param_value NUMERIC(10, 4) NOT NULL,
   description TEXT
 );
 
@@ -142,3 +142,57 @@ CREATE INDEX IF NOT EXISTS idx_order_customer_location ON orders USING GIST (cus
 CREATE INDEX IF NOT EXISTS idx_order_tracking_loc ON order_tracking USING GIST (worker_location);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_worker_active_filters ON worker_profiles(primary_skill_id, is_available, is_on_active_job, kyc_status);
+
+-- Enable Row Level Security (RLS) on all application tables
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE service_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE customer_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE worker_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_tracking ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ratings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE disputes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE matching_config ENABLE ROW LEVEL SECURITY;
+
+-- 1. Service Categories: Public Read
+CREATE POLICY "Public read service_categories" ON service_categories FOR SELECT USING (true);
+
+-- 2. Services: Public Read
+CREATE POLICY "Public read services" ON services FOR SELECT USING (true);
+
+-- 3. Customer Profiles: Own Only
+CREATE POLICY "Customers view own profile" ON customer_profiles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Customers update own profile" ON customer_profiles FOR UPDATE USING (auth.uid() = user_id);
+
+-- 4. Worker Profiles: Public Read for Verified Workers, Own Update
+CREATE POLICY "Public view verified worker profiles" ON worker_profiles FOR SELECT USING (kyc_status = 'verified');
+CREATE POLICY "Workers update own profile" ON worker_profiles FOR UPDATE USING (auth.uid() = user_id);
+
+-- 5. Orders: Customers and Assigned Workers Access
+CREATE POLICY "Users view own orders" ON orders FOR SELECT USING (auth.uid() = customer_id OR auth.uid() = worker_id);
+CREATE POLICY "Customers create own orders" ON orders FOR INSERT WITH CHECK (auth.uid() = customer_id);
+CREATE POLICY "Involved parties update orders" ON orders FOR UPDATE USING (auth.uid() = customer_id OR auth.uid() = worker_id);
+
+-- 6. Order Tracking: Order Participants Access
+CREATE POLICY "View tracking for own orders" ON order_tracking FOR SELECT 
+USING (EXISTS (SELECT 1 FROM orders WHERE orders.id = order_tracking.order_id AND (orders.customer_id = auth.uid() OR orders.worker_id = auth.uid())));
+CREATE POLICY "Workers log tracking for own orders" ON order_tracking FOR INSERT 
+WITH CHECK (EXISTS (SELECT 1 FROM orders WHERE orders.id = order_tracking.order_id AND orders.worker_id = auth.uid()));
+
+-- 7. Ratings: Public Read, Customer Insert
+CREATE POLICY "Public read reviews" ON ratings FOR SELECT USING (true);
+CREATE POLICY "Customers submit rating for own order" ON ratings FOR INSERT WITH CHECK (auth.uid() = customer_id);
+
+-- 8. Notifications: Own Only
+CREATE POLICY "Users view own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users update own notifications" ON notifications FOR UPDATE USING (auth.uid() = user_id);
+
+-- 9. Disputes: Own Only
+CREATE POLICY "Users view own disputes" ON disputes FOR SELECT USING (auth.uid() = raised_by);
+CREATE POLICY "Users create own disputes" ON disputes FOR INSERT WITH CHECK (auth.uid() = raised_by);
+
+-- 10. Users: Own Only
+CREATE POLICY "Users view own record" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users update own record" ON users FOR UPDATE USING (auth.uid() = id);
